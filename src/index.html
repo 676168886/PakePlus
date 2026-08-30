@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <!-- 关键：视口设置，确保在移动设备上正确缩放 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>我的应用</title>
+    <style>
+        /* 全局样式与移动端适配 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f5f7fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 16px;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 24px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 16px;
+            word-break: break-word;
+        }
+        #content {
+            font-size: 16px;
+            color: #666;
+            line-height: 1.6;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .loading {
+            color: #1890ff;
+        }
+        .error {
+            color: #ff4d4f;
+        }
+        .success {
+            color: #52c41a;
+        }
+        .retry-info {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #999;
+        }
+        button {
+            margin-top: 16px;
+            padding: 10px 24px;
+            background-color: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #40a9ff;
+        }
+        button:disabled {
+            background-color: #d9d9d9;
+            cursor: not-allowed;
+        }
+        /* 针对小屏幕的额外优化 */
+        @media (max-width: 480px) {
+            .container {
+                padding: 16px;
+            }
+            h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 应用加载中</h1>
+        <div id="content">
+            <div class="loading">⏳ 正在连接服务器...</div>
+        </div>
+    </div>
+
+    <script>
+        // 配置区
+        const SERVER_URL = 'http://192.168.1.18:8080/kitchen';
+        const RETRY_DELAY = 2000; // 2秒重试间隔
+        const MAX_RETRIES = 5; // 最大重试次数，避免无限循环
+
+        let retryCount = 0;
+        let retryTimer = null;
+
+        const contentDiv = document.getElementById('content');
+
+        // 更新页面显示内容的函数
+        function updateContent(message, type = 'loading') {
+            contentDiv.innerHTML = `<div class="${type}">${message}</div>`;
+        }
+
+        // 显示加载状态
+        function showLoading(message = '⏳ 正在连接服务器...') {
+            updateContent(message, 'loading');
+        }
+
+        // 显示错误状态
+        function showError(message) {
+            updateContent(`❌ ${message}`, 'error');
+        }
+
+        // 显示成功状态
+        function showSuccess(message) {
+            updateContent(`✅ ${message}`, 'success');
+        }
+
+        // 核心请求函数
+        function fetchData() {
+            // 清除之前的重试定时器
+            if (retryTimer) {
+                clearTimeout(retryTimer);
+                retryTimer = null;
+            }
+
+            showLoading(`⏳ 正在连接服务器... (尝试 ${retryCount + 1}/${MAX_RETRIES})`);
+
+            // 使用 fetch API 发送请求
+            fetch(SERVER_URL)
+                .then(response => {
+                    if (!response.ok) {
+                        // 如果HTTP状态码不是2xx，视为错误
+                        throw new Error(`服务器响应异常 (HTTP ${response.status})`);
+                    }
+                    return response.text(); // 或 response.json() 如果接口返回JSON
+                })
+                .then(data => {
+                    // 请求成功
+                    retryCount = 0; // 重置重试计数
+                    showSuccess('🎉 服务器连接成功！');
+                    // 这里可以根据服务器返回的数据做进一步处理
+                    console.log('服务器返回数据:', data);
+                    // 例如，将数据显示在页面上
+                    // contentDiv.innerHTML += `<pre style="margin-top:16px;text-align:left;background:#f0f0f0;padding:12px;border-radius:6px;overflow-x:auto;">${JSON.stringify(data, null, 2)}</pre>`;
+                })
+                .catch(error => {
+                    // 请求失败（网络错误、超时、解析错误等）
+                    console.error('请求失败:', error);
+                    retryCount++;
+
+                    if (retryCount < MAX_RETRIES) {
+                        const msg = `⚠️ 连接失败 (${error.message || '网络错误'})，${RETRY_DELAY/1000}秒后重试... (${retryCount}/${MAX_RETRIES})`;
+                        showError(msg);
+                        // 设置定时器，2秒后重试
+                        retryTimer = setTimeout(() => {
+                            fetchData();
+                        }, RETRY_DELAY);
+                    } else {
+                        // 超过最大重试次数
+                        showError(`😥 服务器连接失败，已重试 ${MAX_RETRIES} 次。请检查网络或稍后再试。`);
+                        // 可以在这里添加一个手动重试按钮
+                        const retryBtn = document.createElement('button');
+                        retryBtn.textContent = '🔄 手动重试';
+                        retryBtn.onclick = () => {
+                            retryCount = 0;
+                            fetchData();
+                        };
+                        contentDiv.appendChild(retryBtn);
+                    }
+                });
+        }
+
+        // 页面加载完成后，立即开始请求
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchData();
+        });
+    </script>
+</body>
+</html>
